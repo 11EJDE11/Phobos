@@ -80,6 +80,8 @@ bool Phobos::Misc::CustomGS = false;
 int Phobos::Misc::CustomGS_ChangeInterval[7] = { -1, -1, -1, -1, -1, -1, -1 };
 int Phobos::Misc::CustomGS_ChangeDelay[7] = { 0, 1, 2, 3, 4, 5, 6 };
 int Phobos::Misc::CustomGS_DefaultDelay[7] = { 0, 1, 2, 3, 4, 5, 6 };
+int Phobos::Misc::CustomGameSpeedFPS = 280;
+bool Phobos::Misc::EnableCustomFPS = true;
 
 DEFINE_HOOK(0x5FACDF, OptionsClass_LoadSettings_LoadPhobosSettings, 0x5)
 {
@@ -249,6 +251,16 @@ DEFINE_HOOK(0x52D21F, InitRules_ThingsThatShouldntBeSerailized, 0x6)
 	Phobos::Config::UnitPowerDrain = pINI_RULESMD->ReadBool(GameStrings::General, "UnitPowerDrain", false);
 
 	Phobos::Misc::CustomGS = pINI_RULESMD->ReadBool(GameStrings::General, "CustomGS", false);
+
+	// Custom FPS settings
+	Phobos::Misc::EnableCustomFPS = pINI_RULESMD->ReadBool(GameStrings::General, "EnableCustomFPS", true);
+	Phobos::Misc::CustomGameSpeedFPS = pINI_RULESMD->ReadInteger(GameStrings::General, "CustomGameSpeedFPS", Phobos::Misc::CustomGameSpeedFPS);
+
+	// Clamp FPS to reasonable values (30-240)
+	if (Phobos::Misc::CustomGameSpeedFPS < 30)
+		Phobos::Misc::CustomGameSpeedFPS = 30;
+	else if (Phobos::Misc::CustomGameSpeedFPS > 240)
+		Phobos::Misc::CustomGameSpeedFPS = 240;
 
 	char tempBuffer[26];
 	for (size_t i = 0; i <= 6; ++i)
