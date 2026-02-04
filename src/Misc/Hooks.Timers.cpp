@@ -21,8 +21,7 @@ DEFINE_HOOK(0x6D4B50, PrintTimerOnTactical_Start, 0x6)
 	TimerValueTemp::oldValue = value;
 
 	if (Phobos::Config::RealTimeTimers_Adaptive
-		|| GameOptionsClass::Instance.GameSpeed == 0
-		|| (Phobos::Misc::CustomGS && !SessionClass::IsMultiplayer()))
+		|| GameOptionsClass::Instance.GameSpeed == 0)
 	{
 		value = (int)((double)value / (std::max((double)FPSCounter::CurrentFrameRate, 1.0) / 15.0));
 		return 0;

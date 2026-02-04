@@ -117,11 +117,6 @@ public:
 	class Misc
 	{
 	public:
-		static bool CustomGS;
-		static int CustomGS_ChangeInterval[7];
-		static int CustomGS_ChangeDelay[7];
-		static int CustomGS_DefaultDelay[7];
-
 		// Custom FPS settings
 		static int CustomGameSpeedFPS;        // Target FPS (default: 120)
 		static bool EnableCustomFPS;          // Enable custom FPS unlock (default: true)

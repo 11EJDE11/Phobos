@@ -76,10 +76,6 @@ bool Phobos::Config::ShowFlashOnSelecting = false;
 bool Phobos::Config::UnitPowerDrain = false;
 int Phobos::Config::SuperWeaponSidebar_RequiredSignificance = 0;
 
-bool Phobos::Misc::CustomGS = false;
-int Phobos::Misc::CustomGS_ChangeInterval[7] = { -1, -1, -1, -1, -1, -1, -1 };
-int Phobos::Misc::CustomGS_ChangeDelay[7] = { 0, 1, 2, 3, 4, 5, 6 };
-int Phobos::Misc::CustomGS_DefaultDelay[7] = { 0, 1, 2, 3, 4, 5, 6 };
 int Phobos::Misc::CustomGameSpeedFPS = 90;
 bool Phobos::Misc::EnableCustomFPS = true;
 
@@ -250,8 +246,6 @@ DEFINE_HOOK(0x52D21F, InitRules_ThingsThatShouldntBeSerailized, 0x6)
 	Phobos::Config::ArtImageSwap = pINI_RULESMD->ReadBool(GameStrings::General, "ArtImageSwap", false);
 	Phobos::Config::UnitPowerDrain = pINI_RULESMD->ReadBool(GameStrings::General, "UnitPowerDrain", false);
 
-	Phobos::Misc::CustomGS = pINI_RULESMD->ReadBool(GameStrings::General, "CustomGS", false);
-
 	// Custom FPS settings
 	Phobos::Misc::EnableCustomFPS = pINI_RULESMD->ReadBool(GameStrings::General, "EnableCustomFPS", true);
 	Phobos::Misc::CustomGameSpeedFPS = pINI_RULESMD->ReadInteger(GameStrings::General, "CustomGameSpeedFPS", Phobos::Misc::CustomGameSpeedFPS);
@@ -259,26 +253,6 @@ DEFINE_HOOK(0x52D21F, InitRules_ThingsThatShouldntBeSerailized, 0x6)
 	// Guard against division by zero; practical max is ~1000 FPS (timeGetTime() resolution)
 	if (Phobos::Misc::CustomGameSpeedFPS < 1)
 		Phobos::Misc::CustomGameSpeedFPS = 1;
-
-	char tempBuffer[26];
-	for (size_t i = 0; i <= 6; ++i)
-	{
-		int temp;
-		_snprintf_s(tempBuffer, sizeof(tempBuffer), "CustomGS%d.ChangeDelay", 6 - i);
-		temp = pINI_RULESMD->ReadInteger(GameStrings::General, tempBuffer, -1);
-		if (temp >= 0 && temp <= 6)
-			Phobos::Misc::CustomGS_ChangeDelay[i] = 6 - temp;
-
-		_snprintf_s(tempBuffer, sizeof(tempBuffer), "CustomGS%d.DefaultDelay", 6 - i);
-		temp = pINI_RULESMD->ReadInteger(GameStrings::General, tempBuffer, -1);
-		if (temp >= 1)
-			Phobos::Misc::CustomGS_DefaultDelay[i] = 6 - temp;
-
-		_snprintf_s(tempBuffer, sizeof(tempBuffer), "CustomGS%d.ChangeInterval", 6 - i);
-		temp = pINI_RULESMD->ReadInteger(GameStrings::General, tempBuffer, -1);
-		if (temp >= 1)
-			Phobos::Misc::CustomGS_ChangeInterval[i] = temp;
-	}
 
 	if (pINI_RULESMD->ReadBool(GameStrings::General, "FixTransparencyBlitters", true))
 		BlittersFix::Apply();
