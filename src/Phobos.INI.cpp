@@ -76,8 +76,8 @@ bool Phobos::Config::ShowFlashOnSelecting = false;
 bool Phobos::Config::UnitPowerDrain = false;
 int Phobos::Config::SuperWeaponSidebar_RequiredSignificance = 0;
 
-int Phobos::Misc::CustomGameSpeedFPS = 90;
-bool Phobos::Misc::EnableCustomFPS = true;
+int Phobos::Misc::CustomGameSpeedFPS[7] = { 0, 0, 0, 0, 0, 0, 0 };
+bool Phobos::Misc::EnableCustomFPS = false;
 
 DEFINE_HOOK(0x5FACDF, OptionsClass_LoadSettings_LoadPhobosSettings, 0x5)
 {
@@ -248,11 +248,17 @@ DEFINE_HOOK(0x52D21F, InitRules_ThingsThatShouldntBeSerailized, 0x6)
 
 	// Custom FPS settings
 	Phobos::Misc::EnableCustomFPS = pINI_RULESMD->ReadBool(GameStrings::General, "EnableCustomFPS", true);
-	Phobos::Misc::CustomGameSpeedFPS = pINI_RULESMD->ReadInteger(GameStrings::General, "CustomGameSpeedFPS", Phobos::Misc::CustomGameSpeedFPS);
 
-	// Guard against division by zero; practical max is ~1000 FPS (timeGetTime() resolution)
-	if (Phobos::Misc::CustomGameSpeedFPS < 1)
-		Phobos::Misc::CustomGameSpeedFPS = 1;
+	{
+		char tempBuffer[32];
+		for (int i = 0; i < 7; ++i)
+		{
+			_snprintf_s(tempBuffer, sizeof(tempBuffer), "CustomGameSpeedFPS.%d", i);
+			Phobos::Misc::CustomGameSpeedFPS[i] = pINI_RULESMD->ReadInteger(GameStrings::General, tempBuffer, Phobos::Misc::CustomGameSpeedFPS[i]);
+			if (Phobos::Misc::CustomGameSpeedFPS[i] < 0)
+				Phobos::Misc::CustomGameSpeedFPS[i] = 0;
+		}
+	}
 
 	if (pINI_RULESMD->ReadBool(GameStrings::General, "FixTransparencyBlitters", true))
 		BlittersFix::Apply();

@@ -10,12 +10,13 @@
 //   3) Hooking SyncDelay (0x55E1B6) to redirect skirmish to the NFTTimer code path
 //
 // Add to rulesmd.ini under [General]:
-//   EnableCustomFPS=yes          ; Enable/disable custom FPS (default: yes) --Todo:change default to no
-//   CustomGameSpeedFPS=120       ; Target FPS (default: 120, practical max ~1000)  --Todo: Update default
+//   EnableCustomFPS=yes              ; Enable/disable custom FPS (default: yes)
+//   CustomGameSpeedFPS.0=120         ; Per-speed FPS. 0 = vanilla. Vanilla: 0=60, 1=45, 2=30, 3=20, 4=15, 5=12, 6=10
 //
 // How it works:
-//   -When GameSpeed is set to 0 (fastest), the game will run at CustomGameSpeedFPS
-//   -Other GameSpeed values use vanilla calculations
+//   -Each speed slot with a non-zero CustomGameSpeedFPS.N runs at that target FPS
+//   -Slots with 0 (or unset) use vanilla FPS for that position
+//   -Practical max is ~1000 FPS (timeGetTime() resolution)
 // =============================================================================
 
 #include <Phobos.h>
@@ -40,18 +41,14 @@ DEFINE_PATCH(0x647C28, 0xBE, 0xFF, 0xFF, 0xFF, 0x7F); // mov esi, INT_MAX
 // Original: v26 = 60, v68 = v26, calculate v28 from GameSpeed, then v68 = min(v26, v28).
 // The patch at 0x647C28 sets v26 = INT_MAX, so the cap is effectively disabled.
 // We set v28 (EAX) here; the cap check at 0x647C6C then gives v68 = v28.
-// Check GameSpeed == 0 so the vanilla speed slider still works.
-// Note: if CustomGameSpeedFPS < 60, the speed slider order becomes unintuitive:
-//   10 > 20 > 30 > 45 > [CustomFPS]
 DEFINE_HOOK(0x647C4D, Queue_AI_Multiplayer_CustomFPSCalculation, 0x1F)
 {
 	int gameSpeed = GameOptionsClass::Instance.GameSpeed;
 	int calculatedFPS;
 
-	if (Phobos::Misc::EnableCustomFPS && gameSpeed == 0)
+	if (Phobos::Misc::EnableCustomFPS && Phobos::Misc::CustomGameSpeedFPS[gameSpeed] > 0)
 	{
-		// Custom FPS when GameSpeed is 0 (fastest)
-		calculatedFPS = Phobos::Misc::CustomGameSpeedFPS;
+		calculatedFPS = Phobos::Misc::CustomGameSpeedFPS[gameSpeed];
 	}
 	else if (gameSpeed == 0)
 	{
@@ -100,7 +97,7 @@ DEFINE_HOOK(0x55D7B6, MainLoop_SkirmishFPSFix, 0xC)
 	const int gameSpeed = R->ESI();
 
 	const bool shouldUseCustomFPS = Phobos::Misc::EnableCustomFPS
-		&& gameSpeed == 0
+		&& Phobos::Misc::CustomGameSpeedFPS[gameSpeed] > 0
 		&& SessionClass::IsSkirmish();
 
 	if (!shouldUseCustomFPS)
@@ -111,9 +108,11 @@ DEFINE_HOOK(0x55D7B6, MainLoop_SkirmishFPSFix, 0xC)
 		return 0x55D7C2;
 	}
 
+	const int customFPS = Phobos::Misc::CustomGameSpeedFPS[gameSpeed];
+
 	// calc frame timings
-	const int targetFrameDelayTicks = 60 / Phobos::Misc::CustomGameSpeedFPS;
-	const int targetFrameTimeMs = std::max(1, 1000 / Phobos::Misc::CustomGameSpeedFPS); // 1ms floor = ~1000 FPS ceiling
+	const int targetFrameDelayTicks = 60 / customFPS;
+	const int targetFrameTimeMs = std::max(1, 1000 / customFPS); // 1ms floor = ~1000 FPS ceiling
 
 	const DWORD currentTime = timeGetTime();
 
@@ -125,7 +124,7 @@ DEFINE_HOOK(0x55D7B6, MainLoop_SkirmishFPSFix, 0xC)
 	NFTTimer.CurrentTime = currentTime;
 	NFTTimer.TimeLeft = targetFrameTimeMs;
 
-	SessionClass::Instance.DesiredFrameRate = Phobos::Misc::CustomGameSpeedFPS;
+	SessionClass::Instance.DesiredFrameRate = customFPS;
 
 	return 0x55D7C2; // Past the two MOVs we replaced
 }
@@ -136,7 +135,7 @@ DEFINE_HOOK(0x55E1B6, SyncDelay_RedirectSkirmishToNFTTimer, 0x6)
 {
 	if (SessionClass::IsSkirmish())
 	{
-		if (Phobos::Misc::EnableCustomFPS && GameOptionsClass::Instance.GameSpeed == 0)
+		if (Phobos::Misc::EnableCustomFPS && Phobos::Misc::CustomGameSpeedFPS[GameOptionsClass::Instance.GameSpeed] > 0)
 			return 0x55E1BC; // Custom FPS: use NFTTimer path like multiplayer
 
 		return 0x55E2B4; // Vanilla FrameTimer path

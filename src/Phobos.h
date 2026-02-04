@@ -117,9 +117,8 @@ public:
 	class Misc
 	{
 	public:
-		// Custom FPS settings
-		static int CustomGameSpeedFPS;        // Target FPS (default: 120)
-		static bool EnableCustomFPS;          // Enable custom FPS unlock (default: true)
+		static int CustomGameSpeedFPS[7];
+		static bool EnableCustomFPS;
 	};
 
 
