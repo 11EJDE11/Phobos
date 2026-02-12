@@ -12,15 +12,43 @@
 #include "ToggleSWSidebar.h"
 #include "FireTacticalSW.h"
 #include "ToggleMessageList.h"
+#include "ChatModeHotkeys.h"
 
 #include <CCINIClass.h>
 
 #include <Ext/Sidebar/SWSidebar/SWSidebarClass.h>
 #include <Misc/MessageColumn.h>
 
+static bool HasCommand(const char* commandName)
+{
+	for (int idx = 0; idx < CommandClass::Array.Count; ++idx)
+	{
+		auto* pCommand = CommandClass::Array.Items[idx];
+
+		if (pCommand && !_strcmpi(pCommand->GetName(), commandName))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+template <typename T>
+static void MakeCommandIfMissing(const char* commandName)
+{
+	if (!HasCommand(commandName))
+	{
+		MakeCommand<T>();
+	}
+}
+
 DEFINE_HOOK(0x533066, CommandClassCallback_Register, 0x6)
 {
 	// Load it after Ares'
+
+	MakeCommandIfMissing<ChatModeHotkeys::ChatToAllCommandClass>(ChatModeHotkeys::ChatToAllCommandName);
+	MakeCommandIfMissing<ChatModeHotkeys::ChatToAlliesCommandClass>(ChatModeHotkeys::ChatToAlliesCommandName);
 
 	MakeCommand<NextIdleHarvesterCommandClass>();
 	MakeCommand<QuickSaveCommandClass>();

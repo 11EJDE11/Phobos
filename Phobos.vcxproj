@@ -49,6 +49,7 @@
     <ClCompile Include="src\New\Type\AttachEffectTypeClass.cpp" />
     <ClCompile Include="src\Misc\MessageColumn.cpp" />
     <ClCompile Include="src\Commands\ToggleMessageList.cpp" />
+    <ClCompile Include="src\Commands\ChatModeHotkeys.cpp" />
     <ClCompile Include="src\Commands\Commands.cpp" />
     <ClCompile Include="src\Commands\DamageDisplay.cpp" />
     <ClCompile Include="src\Commands\FrameByFrame.cpp" />
@@ -95,6 +96,7 @@
     <ClCompile Include="src\Ext\Unit\Hooks.Harvester.cpp" />
     <ClCompile Include="src\Locomotion\TestLocomotionClass.cpp" />
     <ClCompile Include="src\Misc\Hooks.Gamespeed.cpp" />
+    <ClCompile Include="src\Misc\Hooks.ChatInputHotkeys.cpp" />
     <ClCompile Include="src\Misc\Hooks.Ares.cpp" />
     <ClCompile Include="src\Misc\Hooks.Crates.cpp" />
     <ClCompile Include="src\Misc\Hooks.LightEffects.cpp" />
@@ -234,6 +236,7 @@
     <ClInclude Include="src\New\Type\AttachEffectTypeClass.h" />
     <ClInclude Include="src\Misc\MessageColumn.h" />
     <ClInclude Include="src\Commands\ToggleMessageList.h" />
+    <ClInclude Include="src\Commands\ChatModeHotkeys.h" />
     <ClInclude Include="src\Commands\FrameByFrame.h" />
     <ClInclude Include="src\Commands\FrameStep.h" />
     <ClInclude Include="src\Commands\NextIdleHarvester.h" />
