@@ -2,6 +2,7 @@
 
 #include <TunnelLocomotionClass.h>
 #include <JumpjetLocomotionClass.h>
+#include <MapClass.h>
 
 #include <Ext/Anim/Body.h>
 #include <Ext/BuildingType/Body.h>
@@ -444,8 +445,42 @@ DEFINE_HOOK(0x4DB218, FootClass_GetMovementSpeed_SpeedMultiplier, 0x6)
 {
 	GET(FootClass*, pThis, ESI);
 	GET(int, speed, EAX);
+	const int originalSpeed = speed;
 
 	auto const pExt = TechnoExt::ExtMap.Find(pThis);
+
+	if (pExt->FormationMoveActive && pThis->GetCurrentMission() == Mission::Move && pExt->FormationMoveSpeed != SpeedType::None)
+	{
+		auto landType = pThis->GetCell()->LandType;
+
+		if (pThis->OnBridge && (landType == LandType::Water || landType == LandType::Beach))
+			landType = LandType::Road;
+
+		const int landTypeIndex = static_cast<int>(landType);
+		const int desiredSpeedTypeIndex = static_cast<int>(pExt->FormationMoveSpeed);
+		int currentSpeedTypeIndex = -1;
+
+		if (auto const pType = pThis->GetTechnoType())
+			currentSpeedTypeIndex = static_cast<int>(pType->SpeedType);
+
+		if (landTypeIndex >= 0 && landTypeIndex < 12
+			&& desiredSpeedTypeIndex >= 0 && desiredSpeedTypeIndex < 8
+			&& currentSpeedTypeIndex >= 0 && currentSpeedTypeIndex < 8)
+		{
+			auto const desiredCost = GroundType::Array[landTypeIndex].Cost[desiredSpeedTypeIndex];
+			auto const currentCost = GroundType::Array[landTypeIndex].Cost[currentSpeedTypeIndex];
+
+			if (desiredCost > 0.0 && currentCost > 0.0)
+			{
+				const int adjustedSpeed = static_cast<int>(originalSpeed * (desiredCost / currentCost));
+
+				// Never let formation override collapse movement to zero.
+				if (adjustedSpeed > 0)
+					speed = adjustedSpeed;
+			}
+		}
+	}
+
 	speed = static_cast<int>(speed * pExt->AE.SpeedMultiplier);
 	R->EAX(speed);
 
@@ -684,7 +719,8 @@ DEFINE_HOOK(0x70EFE0, TechnoClass_GetMaxSpeed, 0x6)
 
 	GET(TechnoClass*, pThis, ECX);
 
-	auto const pTypeExt = TechnoExt::ExtMap.Find(pThis)->TypeExtData;
+	auto const pExt = TechnoExt::ExtMap.Find(pThis);
+	auto const pTypeExt = pExt->TypeExtData;
 	auto const pThisType = pTypeExt->OwnerObject();
 	int maxSpeed = pThisType->Speed;
 
@@ -693,6 +729,9 @@ DEFINE_HOOK(0x70EFE0, TechnoClass_GetMaxSpeed, 0x6)
 		if (auto const pType = TechnoTypeExt::GetTechnoType(pThis->Disguise))
 			maxSpeed = pType->Speed;
 	}
+
+	if (pExt->FormationMoveActive && pThis->GetCurrentMission() == Mission::Move && pExt->FormationMoveMaxSpeed >= 0)
+		maxSpeed = pExt->FormationMoveMaxSpeed;
 
 	R->EAX(maxSpeed);
 	return SkipGameCode;

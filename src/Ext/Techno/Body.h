@@ -68,6 +68,12 @@ public:
 		int LastWarpInDelay;                   // Last-warp in delay for this unit, used by HasCarryoverWarpInDelay.
 		bool IsBeingChronoSphered;             // Set to true on units currently being ChronoSphered, does not apply to Ares-ChronoSphere'd buildings or Chrono reinforcements.
 		bool KeepTargetOnMove;
+		bool FormationOffsetValid;
+		int FormationOffsetX;
+		int FormationOffsetY;
+		bool FormationMoveActive;
+		SpeedType FormationMoveSpeed;
+		int FormationMoveMaxSpeed;
 		CellStruct LastSensorsMapCoords;
 		CDTimerClass TiberiumEater_Timer;
 		bool DelayedFireSequencePaused;
@@ -144,6 +150,12 @@ public:
 			, LastWarpInDelay { 0 }
 			, IsBeingChronoSphered { false }
 			, KeepTargetOnMove { false }
+			, FormationOffsetValid { false }
+			, FormationOffsetX { 0 }
+			, FormationOffsetY { 0 }
+			, FormationMoveActive { false }
+			, FormationMoveSpeed { SpeedType::None }
+			, FormationMoveMaxSpeed { -1 }
 			, LastSensorsMapCoords { CellStruct::Empty }
 			, TiberiumEater_Timer {}
 			, AirstrikeTargetingMe { nullptr }
