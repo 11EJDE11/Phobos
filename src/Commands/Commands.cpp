@@ -21,6 +21,7 @@
 #include <Ext/Techno/Body.h>
 #include <Ext/Sidebar/SWSidebar/SWSidebarClass.h>
 #include <Misc/MessageColumn.h>
+#include <MessageListClass.h>
 
 namespace
 {
@@ -36,7 +37,10 @@ namespace
 		return whatAmI == AbstractType::Unit || whatAmI == AbstractType::Infantry;
 	}
 
-	// Assigns RA1-style mathematical offsets for a named formation shape to all group members.
+	constexpr int FormationLineMaxLen = 20;
+
+	// Assigns formation offsets using 1-cell spacing, wrapping into multiple
+	// rows/columns (lines) or a triangular fill (wedges) at FormationLineMaxLen.
 	static void ApplyFormationShape(int team, HouseClass* pCurrentPlayer, FormationShapeType shape)
 	{
 		std::vector<FootClass*> members;
@@ -66,7 +70,7 @@ namespace
 		if (n == 0 || formationMaxSpeed == INT32_MAX)
 			return;
 
-		// Sort so the unit already closest to the tip direction gets the tip slot.
+		// Sort so the unit closest to the lead direction gets the tip/first slot.
 		switch (shape)
 		{
 		case FormationShapeType::LineEW:
@@ -95,95 +99,98 @@ namespace
 			break;
 		}
 
-		// Calculate and assign RA1-faithful offsets, relative to the move destination.
-		int xdir = 0, ydir = 0;
-		bool evenodd = true;
+		auto assign = [&](FootClass* pFoot, int xOff, int yOff)
+		{
+			auto const pExt = TechnoExt::ExtMap.Find(pFoot);
+			pExt->FormationOffsetX = xOff;
+			pExt->FormationOffsetY = yOff;
+			pExt->FormationOffsetValid = true;
+			pExt->FormationShape = shape;
+			pExt->FormationMoveSpeed = formationSpeed;
+			pExt->FormationMoveMaxSpeed = formationMaxSpeed;
+		};
 
 		switch (shape)
 		{
 		case FormationShapeType::LineEW:
-			xdir = -(n / 2);
-			for (auto const pFoot : members)
 			{
-				auto const pExt = TechnoExt::ExtMap.Find(pFoot);
-				pExt->FormationOffsetX = xdir;
-				pExt->FormationOffsetY = 0;
-				pExt->FormationOffsetValid = true;
-				pExt->FormationShape = shape;
-				pExt->FormationMoveSpeed = formationSpeed;
-				pExt->FormationMoveMaxSpeed = formationMaxSpeed;
-				xdir += 2;
+				// Rows of up to FormationLineMaxLen units wide, stacked along Y.
+				const int W = FormationLineMaxLen;
+				const int numRows = (n + W - 1) / W;
+				int idx = 0;
+				for (int row = 0; row < numRows && idx < n; row++)
+				{
+					const int rowSize = std::min(W, n - row * W);
+					const int yOff = row - numRows / 2;
+					const int xStart = -(rowSize / 2);
+					for (int j = 0; j < rowSize; j++)
+						assign(members[idx++], xStart + j, yOff);
+				}
 			}
 			break;
 
 		case FormationShapeType::LineNS:
-			ydir = -(n / 2);
-			for (auto const pFoot : members)
 			{
-				auto const pExt = TechnoExt::ExtMap.Find(pFoot);
-				pExt->FormationOffsetX = 0;
-				pExt->FormationOffsetY = ydir;
-				pExt->FormationOffsetValid = true;
-				pExt->FormationShape = shape;
-				pExt->FormationMoveSpeed = formationSpeed;
-				pExt->FormationMoveMaxSpeed = formationMaxSpeed;
-				ydir += 2;
+				// Columns of up to FormationLineMaxLen units tall, stacked along X.
+				const int W = FormationLineMaxLen;
+				const int numCols = (n + W - 1) / W;
+				int idx = 0;
+				for (int col = 0; col < numCols && idx < n; col++)
+				{
+					const int colSize = std::min(W, n - col * W);
+					const int xOff = col - numCols / 2;
+					const int yStart = -(colSize / 2);
+					for (int j = 0; j < colSize; j++)
+						assign(members[idx++], xOff, yStart + j);
+				}
 			}
 			break;
 
 		case FormationShapeType::WedgeN:
 		case FormationShapeType::WedgeS:
-			{
-				// WedgeN: tip at north (negative Y), units fan south (+yStep).
-				// WedgeS: tip at south (positive Y), units fan north (-yStep).
-				const int yStep = (shape == FormationShapeType::WedgeN) ? 2 : -2;
-				ydir = (shape == FormationShapeType::WedgeN) ? -(n / 2) : (n / 2);
-				xdir = 0;
-				evenodd = true;
-				for (auto const pFoot : members)
-				{
-					auto const pExt = TechnoExt::ExtMap.Find(pFoot);
-					pExt->FormationOffsetX = xdir;
-					pExt->FormationOffsetY = ydir;
-					pExt->FormationOffsetValid = true;
-					pExt->FormationShape = shape;
-					pExt->FormationMoveSpeed = formationSpeed;
-					pExt->FormationMoveMaxSpeed = formationMaxSpeed;
-					xdir = -xdir;
-					evenodd = !evenodd;
-					if (!evenodd)
-					{
-						xdir -= 2;
-						ydir += yStep;
-					}
-				}
-			}
-			break;
-
 		case FormationShapeType::WedgeE:
 		case FormationShapeType::WedgeW:
 			{
-				// WedgeE: tip at east (positive X), units fan west (-xStep).
-				// WedgeW: tip at west (negative X), units fan east (+xStep).
-				const int xStep = (shape == FormationShapeType::WedgeE) ? -2 : 2;
-				xdir = (shape == FormationShapeType::WedgeE) ? (n / 2) : -(n / 2);
-				ydir = 0;
-				evenodd = true;
-				for (auto const pFoot : members)
+				// Stack multiple V-chevrons behind each other for a ">>>" appearance.
+				// Each V holds up to (1+2*W) units. V's are separated by a 1-cell gap.
+				// WedgeN/S orient along Y; WedgeE/W orient along X.
+				const int W = FormationLineMaxLen / 2;
+				const int vCapacity = 1 + 2 * W;
+				const int numVs = (n + vCapacity - 1) / vCapacity;
+				const int stride = W / 2;
+				const int totalDepth = (numVs - 1) * stride + W + 1;
+				const int tipY = -(totalDepth / 2);
+
+				auto assignW = [&](FootClass* pFoot, int x, int y)
 				{
-					auto const pExt = TechnoExt::ExtMap.Find(pFoot);
-					pExt->FormationOffsetX = xdir;
-					pExt->FormationOffsetY = ydir;
-					pExt->FormationOffsetValid = true;
-					pExt->FormationShape = shape;
-					pExt->FormationMoveSpeed = formationSpeed;
-					pExt->FormationMoveMaxSpeed = formationMaxSpeed;
-					ydir = -ydir;
-					evenodd = !evenodd;
-					if (!evenodd)
+					switch (shape)
 					{
-						xdir += xStep;
-						ydir -= 2;
+					case FormationShapeType::WedgeN: assign(pFoot, x, y); break;
+					case FormationShapeType::WedgeS: assign(pFoot, x, -y); break;
+					case FormationShapeType::WedgeE: assign(pFoot, -y, x); break;
+					case FormationShapeType::WedgeW: assign(pFoot, y, x); break;
+					default: break;
+					}
+				};
+
+				// Place each V-chevron in sequence.
+				int idx = 0;
+				for (int v = 0; v < numVs && idx < n; v++)
+				{
+					const int vTipY = tipY + v * stride;
+					const int vSize = std::min(vCapacity, n - idx);
+					int xdir = 0, ydir = vTipY;
+					bool evenodd = true;
+					for (int k = 0; k < vSize; k++)
+					{
+						assignW(members[idx++], xdir, ydir);
+						xdir = -xdir;
+						evenodd = !evenodd;
+						if (!evenodd)
+						{
+							xdir -= 1;
+							ydir += 1;
+						}
 					}
 				}
 			}
@@ -191,6 +198,21 @@ namespace
 
 		default:
 			break;
+		}
+	}
+
+	static const wchar_t* GetFormationShapeName(FormationShapeType shape)
+	{
+		switch (shape)
+		{
+		case FormationShapeType::Custom:  return L"Custom";
+		case FormationShapeType::LineEW:  return L"Line (E/W)";
+		case FormationShapeType::LineNS:  return L"Line (N/S)";
+		case FormationShapeType::WedgeN:  return L"Wedge (North)";
+		case FormationShapeType::WedgeE:  return L"Wedge (East)";
+		case FormationShapeType::WedgeS:  return L"Wedge (South)";
+		case FormationShapeType::WedgeW:  return L"Wedge (West)";
+		default:                          return L"Unknown";
 		}
 	}
 
@@ -428,6 +450,12 @@ namespace
 			{
 				ApplyFormationShape(team, pCurrentPlayer, nextShape);
 			}
+
+			wchar_t msgBuf[64];
+			swprintf_s(msgBuf, L"Formation: %s", GetFormationShapeName(nextShape));
+			MessageListClass::Instance.PrintMessage(
+				msgBuf, RulesClass::Instance->MessageDelay,
+				HouseClass::CurrentPlayer->ColorSchemeIndex, true);
 		}
 	};
 }
