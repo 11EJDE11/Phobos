@@ -14,6 +14,18 @@ class TechnoExt
 public:
 	using base_type = TechnoClass;
 
+	enum class FormationShapeType : int
+	{
+		Custom = 0, // unit positions at the time of formation toggle
+		LineEW,     // horizontal line (cells spread along X)
+		LineNS,     // vertical column (cells spread along Y)
+		WedgeN,     // V-shape, tip pointing north
+		WedgeE,     // V-shape, tip pointing east
+		WedgeS,     // V-shape, tip pointing south
+		WedgeW,     // V-shape, tip pointing west
+		Count
+	};
+
 	static constexpr DWORD Canary = 0x55555555;
 	static constexpr size_t ExtPointerOffset = 0x34C;
 	static constexpr bool ShouldConsiderInvalidatePointer = true;
@@ -74,6 +86,7 @@ public:
 		bool FormationMoveActive;
 		SpeedType FormationMoveSpeed;
 		int FormationMoveMaxSpeed;
+		FormationShapeType FormationShape;
 		CellStruct LastSensorsMapCoords;
 		CDTimerClass TiberiumEater_Timer;
 		bool DelayedFireSequencePaused;
@@ -156,6 +169,7 @@ public:
 			, FormationMoveActive { false }
 			, FormationMoveSpeed { SpeedType::None }
 			, FormationMoveMaxSpeed { -1 }
+			, FormationShape { FormationShapeType::Custom }
 			, LastSensorsMapCoords { CellStruct::Empty }
 			, TiberiumEater_Timer {}
 			, AirstrikeTargetingMe { nullptr }
