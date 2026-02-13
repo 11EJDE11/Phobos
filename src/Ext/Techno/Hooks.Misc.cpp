@@ -1,7 +1,6 @@
 #include "Body.h"
 
 #include <algorithm>
-#include <cstdint>
 
 #include <EventClass.h>
 #include <TunnelLocomotionClass.h>
@@ -932,42 +931,6 @@ static bool ShouldIssueFormationMove(FootClass* const pFoot, SpeedType& speed, i
 	return true;
 }
 
-static constexpr std::uint32_t FormationMovePackedMarker = 0x40000000u;
-static constexpr std::uint32_t FormationMoveSpeedMask = 0x3Fu;
-static constexpr std::uint32_t FormationMoveSpeedShift = 16u;
-static constexpr std::uint32_t FormationMoveMaxSpeedMask = 0xFFFFu;
-
-static std::uint32_t PackFormationMoveData(const SpeedType speed, const int maxSpeed)
-{
-	auto const packedSpeed = static_cast<std::uint32_t>(std::clamp<int>(static_cast<int>(speed), 0, static_cast<int>(FormationMoveSpeedMask)));
-	auto const packedMaxSpeed = static_cast<std::uint32_t>(std::clamp<int>(maxSpeed, 1, static_cast<int>(FormationMoveMaxSpeedMask)));
-
-	return FormationMovePackedMarker
-		| ((packedSpeed & FormationMoveSpeedMask) << FormationMoveSpeedShift)
-		| (packedMaxSpeed & FormationMoveMaxSpeedMask);
-}
-
-static bool TryUnpackFormationMoveData(const TargetClass& follow, SpeedType& speed, int& maxSpeed)
-{
-	if (follow.m_RTTI != 0)
-		return false;
-
-	auto const raw = static_cast<std::uint32_t>(follow.m_ID);
-
-	if ((raw & FormationMovePackedMarker) == 0u)
-		return false;
-
-	auto const speedValue = static_cast<int>((raw >> FormationMoveSpeedShift) & FormationMoveSpeedMask);
-	auto const maxSpeedValue = static_cast<int>(raw & FormationMoveMaxSpeedMask);
-
-	if (speedValue < static_cast<int>(SpeedType::Foot) || speedValue > static_cast<int>(SpeedType::FloatBeach) || maxSpeedValue <= 0)
-		return false;
-
-	speed = static_cast<SpeedType>(speedValue);
-	maxSpeed = maxSpeedValue;
-	return true;
-}
-
 static void PrepareFormationMegaMissionEvent(EventClass* const pEvent)
 {
 	if (!pEvent || pEvent->Type != EventType::MegaMission || static_cast<Mission>(pEvent->MegaMission.Mission) != Mission::Move)
@@ -1000,23 +963,19 @@ static void PrepareFormationMegaMissionEvent(EventClass* const pEvent)
 		destination = TargetClass(adjustedMapCoords);
 	}
 
-	pExt->FormationMoveSpeed = speed;
-	pExt->FormationMoveMaxSpeed = maxSpeed;
-
+	// Read fields before overwriting - MegaMissionF.Target/Destination are at different offsets.
 	auto const whom = pEvent->MegaMission.Whom;
 	auto const mission = pEvent->MegaMission.Mission;
 	auto const target = pEvent->MegaMission.Target;
 
-	// RA2's execution path reads MegaMission layout even for MegaMissionF,
-	// so store compatibility payload in MegaMission fields and keep the type as MegaMissionF.
+	// Upgrade to MegaMissionF and store formation speed data in its native Speed/MaxSpeed fields.
 	pEvent->Type = EventType::MegaMissionF;
-	pEvent->MegaMission.Whom = whom;
-	pEvent->MegaMission.Mission = mission;
-	pEvent->MegaMission.Target = target;
-	pEvent->MegaMission.Destination = destination;
-	pEvent->MegaMission.Follow.m_RTTI = 0;
-	pEvent->MegaMission.Follow.m_ID = static_cast<int>(PackFormationMoveData(speed, maxSpeed));
-	pEvent->MegaMission.IsPlanningEvent = false;
+	pEvent->MegaMissionF.Whom = whom;
+	pEvent->MegaMissionF.Mission = mission;
+	pEvent->MegaMissionF.Target = target;
+	pEvent->MegaMissionF.Destination = destination;
+	pEvent->MegaMissionF.Speed = static_cast<int>(speed);
+	pEvent->MegaMissionF.MaxSpeed = maxSpeed;
 }
 
 DEFINE_HOOK(0x646F01, EventClass_CreateMegaMission_CheckFormationMove, 0x6)
@@ -1073,32 +1032,56 @@ DEFINE_HOOK(0x4C7462, EventClass_Execute_MegaMission_MoveCommand, 0x5)
 
 	GET(TechnoClass*, pTechno, EDI);
 	GET(EventClass*, pThis, ESI);
+	// MegaMissionF.Mission and MegaMission.Mission are at the same DataBuffer offset.
 	auto const mission = static_cast<Mission>(pThis->MegaMission.Mission);
 
 	if (auto const pFoot = abstract_cast<FootClass*>(pTechno))
 	{
 		auto const pExt = TechnoExt::ExtMap.Find(pFoot);
 
-		if (mission == Mission::Move)
+		if (pThis->Type == EventType::MegaMissionF && mission == Mission::Move)
 		{
-			SpeedType speed = SpeedType::None;
-			int maxSpeed = -1;
-
-			if (TryUnpackFormationMoveData(pThis->MegaMission.Follow, speed, maxSpeed))
-			{
-				pExt->FormationMoveActive = true;
-				pExt->FormationMoveSpeed = speed;
-				pExt->FormationMoveMaxSpeed = maxSpeed;
-			}
-			else
-			{
-				pExt->FormationMoveActive = false;
-			}
+			pExt->FormationMoveActive = true;
+			pExt->FormationMoveSpeed = static_cast<SpeedType>(pThis->MegaMissionF.Speed);
+			pExt->FormationMoveMaxSpeed = pThis->MegaMissionF.MaxSpeed;
 		}
 		else
 		{
 			pExt->FormationMoveActive = false;
 		}
+	}
+
+	// MegaMissionF events are executed here directly: the game's default path uses
+	// MegaMission-layout field offsets for both types, which misreads MegaMissionF data.
+	if (pThis->Type == EventType::MegaMissionF)
+	{
+		if (pTechno->WhatAmI() == AbstractType::Unit)
+		{
+			auto const pExt = TechnoExt::ExtMap.Find(pTechno);
+
+			if (mission == Mission::Move)
+			{
+				// Explicitly reset subterranean harvester state machine.
+				pExt->SubterraneanHarvStatus = 0;
+				pExt->SubterraneanHarvRallyPoint = nullptr;
+
+				// Do not explicitly reset target for KeepTargetOnMove vehicles when issued move command.
+				if (pExt->TypeExtData->KeepTargetOnMove && pTechno->Target
+					&& !pThis->MegaMissionF.Target.As_Abstract()
+					&& pTechno->IsCloseEnoughToAttack(pTechno->Target))
+				{
+					pTechno->SetDestination(pThis->MegaMissionF.Destination.As_Abstract(), true);
+					pExt->KeepTargetOnMove = true;
+					return SkipGameCode;
+				}
+			}
+
+			pExt->KeepTargetOnMove = false;
+		}
+
+		pTechno->SetTarget(pThis->MegaMissionF.Target.As_Abstract());
+		pTechno->SetDestination(pThis->MegaMissionF.Destination.As_Abstract(), true);
+		return SkipGameCode;
 	}
 
 	if (pTechno->WhatAmI() != AbstractType::Unit)
