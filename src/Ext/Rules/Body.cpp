@@ -127,6 +127,8 @@ void RulesExt::ExtData::LoadBeforeTypeData(RulesClass* pThis, CCINIClass* pINI)
 	this->Pips_SelfHeal_Infantry_Offset.Read(exINI, GameStrings::AudioVisual, "Pips.SelfHeal.Infantry.Offset");
 	this->Pips_SelfHeal_Units_Offset.Read(exINI, GameStrings::AudioVisual, "Pips.SelfHeal.Units.Offset");
 	this->Pips_SelfHeal_Buildings_Offset.Read(exINI, GameStrings::AudioVisual, "Pips.SelfHeal.Buildings.Offset");
+	this->Pips_Formation_Frame.Read(exINI, GameStrings::AudioVisual, "Pips.Formation.Frame");
+	this->Pips_Formation_Offset.Read(exINI, GameStrings::AudioVisual, "Pips.Formation.Offset");
 	this->Pips_Generic_Size.Read(exINI, GameStrings::AudioVisual, "Pips.Generic.Size");
 	this->Pips_Generic_Buildings_Size.Read(exINI, GameStrings::AudioVisual, "Pips.Generic.Buildings.Size");
 	this->Pips_Ammo_Size.Read(exINI, GameStrings::AudioVisual, "Pips.Ammo.Size");
@@ -484,6 +486,8 @@ void RulesExt::ExtData::Serialize(T& Stm)
 		.Process(this->Pips_SelfHeal_Infantry_Offset)
 		.Process(this->Pips_SelfHeal_Units_Offset)
 		.Process(this->Pips_SelfHeal_Buildings_Offset)
+		.Process(this->Pips_Formation_Frame)
+		.Process(this->Pips_Formation_Offset)
 		.Process(this->Pips_Generic_Size)
 		.Process(this->Pips_Generic_Buildings_Size)
 		.Process(this->Pips_Ammo_Size)

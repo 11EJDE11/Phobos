@@ -125,6 +125,32 @@ void TechnoExt::DrawSelfHealPips(TechnoClass* pThis, Point2D* pLocation, Rectang
 	}
 }
 
+void TechnoExt::DrawFormationPip(TechnoClass* pThis, Point2D* pLocation, RectangleStruct* pBounds)
+{
+	const int frame = RulesExt::Global()->Pips_Formation_Frame.Get();
+
+	if (frame < 0)
+		return;
+
+	auto const pFoot = abstract_cast<FootClass*>(pThis);
+
+	if (!pFoot)
+		return;
+
+	auto const pExt = TechnoExt::ExtMap.Find(pFoot);
+
+	if (!pExt->FormationOffsetValid)
+		return;
+
+	auto const pType = pThis->GetTechnoType();
+	auto& offset = RulesExt::Global()->Pips_Formation_Offset.Get();
+	Point2D position = { pLocation->X + offset.X, pLocation->Y + offset.Y + pType->PixelSelectionBracketDelta };
+
+	DSurface::Temp->DrawSHP(FileSystem::PALETTE_PAL, FileSystem::PIPS_SHP,
+		frame, &position, pBounds, BlitterFlags::bf_400 | BlitterFlags::Centered,
+		0, 0, ZGradient::Ground, 1000, 0, 0, 0, 0, 0);
+}
+
 void TechnoExt::DrawInsignia(TechnoClass* pThis, Point2D* pLocation, RectangleStruct* pBounds)
 {
 	auto pTechnoTypeExt = TechnoExt::ExtMap.Find(pThis)->TypeExtData;

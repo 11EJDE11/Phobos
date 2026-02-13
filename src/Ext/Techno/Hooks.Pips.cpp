@@ -431,6 +431,7 @@ DEFINE_HOOK(0x70A4FB, TechnoClass_DrawPips_SelfHealGain, 0x5)
 	GET_STACK(RectangleStruct*, pBounds, STACK_OFFSET(0x74, 0xC));
 
 	TechnoExt::DrawSelfHealPips(pThis, pLocation, pBounds);
+	TechnoExt::DrawFormationPip(pThis, pLocation, pBounds);
 
 	return SkipGameDrawing;
 }

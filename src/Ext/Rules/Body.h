@@ -78,6 +78,8 @@ public:
 		Valueable<Point2D> Pips_SelfHeal_Infantry_Offset;
 		Valueable<Point2D> Pips_SelfHeal_Units_Offset;
 		Valueable<Point2D> Pips_SelfHeal_Buildings_Offset;
+		Valueable<int> Pips_Formation_Frame;
+		Valueable<Point2D> Pips_Formation_Offset;
 		Valueable<Point2D> Pips_Generic_Size;
 		Valueable<Point2D> Pips_Generic_Buildings_Size;
 		Valueable<Point2D> Pips_Ammo_Size;
@@ -363,6 +365,8 @@ public:
 			, Pips_SelfHeal_Infantry_Offset { { 25, -35 } }
 			, Pips_SelfHeal_Units_Offset { { 33, -32 } }
 			, Pips_SelfHeal_Buildings_Offset { { 15, 10 } }
+			, Pips_Formation_Frame { 0 }
+			, Pips_Formation_Offset { { -33, -32 } }
 			, Pips_Generic_Size { { 4, 0 } }
 			, Pips_Generic_Buildings_Size { { 4, 2 } }
 			, Pips_Ammo_Size { { 4, 0 } }

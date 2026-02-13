@@ -275,6 +275,7 @@ public:
 	static double GetCurrentSpeedMultiplier(FootClass* pThis);
 	static double GetCurrentFirepowerMultiplier(TechnoClass* pThis);
 	static void DrawSelfHealPips(TechnoClass* pThis, Point2D* pLocation, RectangleStruct* pBounds);
+	static void DrawFormationPip(TechnoClass* pThis, Point2D* pLocation, RectangleStruct* pBounds);
 	static void DrawInsignia(TechnoClass* pThis, Point2D* pLocation, RectangleStruct* pBounds);
 	static void ApplyGainedSelfHeal(TechnoClass* pThis);
 	static void SyncInvulnerability(TechnoClass* pFrom, TechnoClass* pTo);
