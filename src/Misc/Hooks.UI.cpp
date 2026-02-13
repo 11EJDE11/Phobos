@@ -1,5 +1,12 @@
 #include <PreviewClass.h>
 #include <ThemeClass.h>
+#include <FPSCounter.h>
+#include <Fundamentals.h>
+#include <IPXManagerClass.h>
+
+#include <algorithm>
+#include <climits>
+#include <cwchar>
 
 #include <Ext/House/Body.h>
 #include <Ext/Side/Body.h>
@@ -12,6 +19,403 @@
 #include <New/Entity/BannerClass.h>
 
 #include <Utilities/Debug.h>
+
+namespace
+{
+	constexpr int MPDebugPanelMargin = 8;
+	constexpr int MPDebugPanelMinWidth = 340;
+	constexpr int MPDebugPanelMaxWidth = 620;
+	constexpr int MPDebugTableMaxRows = 8;
+	constexpr int MPDebugHeaderHeight = 14;
+	constexpr int MPDebugSummaryLineHeight = 12;
+	constexpr int MPDebugTableHeaderHeight = 12;
+	constexpr int MPDebugTableRowHeight = 12;
+
+	struct MPDebugRow
+	{
+		wchar_t Name[64];
+		int Process;
+		int AverageRoundTrip;
+		int MaxRoundTrip;
+		int LossPercent;
+		int Resends;
+		int FrameSyncStalls;
+		int CommandStalls;
+		ColorStruct AccentColor;
+	};
+
+	struct MPDebugConnectionView
+	{
+		int Unknown_00;
+		void* ConnectionState;
+		int Resends;
+		int Lost;
+		int PercentLost;
+		int FrameSyncStalls;
+		int CommandStalls;
+		char Unknown_1C[0x48];
+		int HouseIndex;
+		char NameRaw[64];
+	};
+
+	static int __fastcall GetConnectionAverageRoundTripFrames(void* const pConnectionState)
+	{
+		return pConnectionState
+			? reinterpret_cast<int(__thiscall*)(void*)>(0x48BA80)(pConnectionState)
+			: 0;
+	}
+
+	static int __fastcall GetConnectionMaxRoundTripFrames(void* const pConnectionState)
+	{
+		return pConnectionState
+			? reinterpret_cast<int(__thiscall*)(void*)>(0x48BA90)(pConnectionState)
+			: 0;
+	}
+
+	static int ClampToNonNegative(const int value)
+	{
+		return value > 0 ? value : 0;
+	}
+
+	static bool DecodeConnectionName(const MPDebugConnectionView* const pConn, wchar_t(&out)[64])
+	{
+		out[0] = L'\0';
+		auto const* const bytes = reinterpret_cast<const unsigned char*>(pConn->NameRaw);
+		if (!bytes[0])
+			return false;
+
+		// Some game paths store remote names as ANSI while others use UTF-16LE.
+		// Detect UTF-16LE by checking that odd bytes are zero for at least 2 chars.
+		int widePairs = 0;
+		bool sawWideTerminator = false;
+		for (int i = 0; i < 16; ++i)
+		{
+			const unsigned char lo = bytes[i * 2];
+			const unsigned char hi = bytes[i * 2 + 1];
+			if (!lo && !hi)
+			{
+				sawWideTerminator = true;
+				break;
+			}
+
+			if (hi)
+			{
+				widePairs = 0;
+				break;
+			}
+
+			++widePairs;
+		}
+
+		const bool isWideName = widePairs >= 2 || (widePairs == 1 && sawWideTerminator);
+		if (isWideName)
+			swprintf_s(out, L"%ls", reinterpret_cast<const wchar_t*>(pConn->NameRaw));
+		else
+			swprintf_s(out, L"%S", pConn->NameRaw);
+
+		return out[0] != L'\0';
+	}
+
+	static int FindPlayerProcessByHouseIndex(const int houseIndex)
+	{
+		if (houseIndex < 0)
+			return -1;
+
+		for (int i = 0; i < NodeNameType::Array.Count; ++i)
+		{
+			if (auto const* const pNode = NodeNameType::Array.GetItem(i))
+			{
+				if (pNode->HouseIndex == houseIndex)
+					return pNode->Time;
+			}
+		}
+
+		return -1;
+	}
+
+	static int FindPlayerProcessByName(const wchar_t* const pName)
+	{
+		if (!pName || !pName[0])
+			return -1;
+
+		for (int i = 0; i < NodeNameType::Array.Count; ++i)
+		{
+			if (auto const* const pNode = NodeNameType::Array.GetItem(i))
+			{
+				if (pNode->Name[0] && !_wcsicmp(pNode->Name, pName))
+					return pNode->Time;
+			}
+		}
+
+		return -1;
+	}
+
+	static ColorStruct ResolvePlayerColorByName(const char* const pName)
+	{
+		if (!pName || !pName[0])
+			return Drawing::TooltipColor;
+
+		for (int i = 0; i < HouseClass::Array.Count; ++i)
+		{
+			if (const auto pHouse = HouseClass::Array.GetItem(i))
+			{
+				if (pHouse->PlainName[0] && !_stricmp(pHouse->PlainName, pName))
+					return pHouse->Color;
+			}
+		}
+
+		return Drawing::TooltipColor;
+	}
+
+	static int GatherMPDebugRowsFromConnections(MPDebugRow(&rows)[MPDebugTableMaxRows])
+	{
+		int count = 0;
+		auto const& ipx = IPXManagerClass::Instance;
+		const int activeConnections = std::clamp<int>(ipx.NumConnections, 0, 7);
+
+		for (int i = 0; i < activeConnections && count < MPDebugTableMaxRows; ++i)
+		{
+			auto const* const pConn = reinterpret_cast<const MPDebugConnectionView*>(ipx.Connection[i]);
+			if (!pConn)
+				continue;
+
+			if (!pConn->NameRaw[0])
+				continue;
+
+			auto const* const pHouse = HouseClass::Array.GetItemOrDefault(pConn->HouseIndex);
+			if (!pHouse || pHouse == HouseClass::CurrentPlayer)
+				continue;
+
+			auto& row = rows[count++];
+			if (!DecodeConnectionName(pConn, row.Name))
+			{
+				--count;
+				continue;
+			}
+			row.Process = FindPlayerProcessByHouseIndex(pConn->HouseIndex);
+			row.AverageRoundTrip = ClampToNonNegative((GetConnectionAverageRoundTripFrames(pConn->ConnectionState) * 1000) / 60);
+			row.MaxRoundTrip = ClampToNonNegative((GetConnectionMaxRoundTripFrames(pConn->ConnectionState) * 1000) / 60);
+			row.LossPercent = ClampToNonNegative(pConn->PercentLost);
+			row.Resends = ClampToNonNegative(pConn->Resends);
+			row.FrameSyncStalls = ClampToNonNegative(pConn->FrameSyncStalls);
+			row.CommandStalls = ClampToNonNegative(pConn->CommandStalls);
+			row.AccentColor = pHouse->Color;
+		}
+
+		return count;
+	}
+
+	static int GatherMPDebugRows(MPDebugRow(&rows)[MPDebugTableMaxRows])
+	{
+		int const fromConnections = GatherMPDebugRowsFromConnections(rows);
+		if (fromConnections > 0)
+			return fromConnections;
+
+		int count = 0;
+		auto const& session = SessionClass::Instance;
+
+		for (int i = 0; i < 8 && count < MPDebugTableMaxRows; ++i)
+		{
+			auto const& stats = session.MPStats[i];
+			if (!stats.Name[0])
+				continue;
+
+			auto& row = rows[count++];
+			swprintf_s(row.Name, L"%S", stats.Name);
+			row.Process = FindPlayerProcessByName(row.Name);
+			row.AverageRoundTrip = ClampToNonNegative(stats.MaxAvgRoundTrip);
+			row.MaxRoundTrip = ClampToNonNegative(stats.MaxRoundTrip);
+			row.LossPercent = ClampToNonNegative(stats.PercentLost);
+			row.Resends = ClampToNonNegative(stats.Resends);
+			row.FrameSyncStalls = ClampToNonNegative(stats.FrameSyncStalls);
+			row.CommandStalls = ClampToNonNegative(stats.CommandCoundStalls);
+			row.AccentColor = ResolvePlayerColorByName(stats.Name);
+		}
+
+		return count;
+	}
+
+	static void DrawMPDebugText(
+		const wchar_t* const pText,
+		const RectangleStruct& clipRect,
+		const int x,
+		const int y,
+		const ColorStruct& color,
+		const TextPrintType flags = TextPrintType::NoShadow | TextPrintType::Point6
+	)
+	{
+		Point2D drawPoint { x, y };
+		RectangleStruct drawRect = clipRect;
+		DSurface::Composite->DrawText(pText, &drawRect, &drawPoint, Drawing::RGB_To_Int(color), 0, flags);
+	}
+
+	static void DrawCompactMPDebugStats()
+	{
+		auto const pSurface = DSurface::Composite;
+		if (!pSurface)
+			return;
+
+		RectangleStruct const viewBounds = DSurface::ViewBounds;
+		const int availableWidth = std::max(240, viewBounds.Width - MPDebugPanelMargin * 2);
+		const int panelWidth = std::max(MPDebugPanelMinWidth, std::min(MPDebugPanelMaxWidth, availableWidth));
+
+		// Keep SessionClass::MPStats in sync in case another code path depends on it.
+		if (SessionClass::IsMultiplayer())
+			reinterpret_cast<void(__thiscall*)(IPXManagerClass*)>(0x542520)(&IPXManagerClass::Instance);
+
+		MPDebugRow rows[MPDebugTableMaxRows] {};
+		const int rowCount = GatherMPDebugRows(rows);
+		const bool showTable = rowCount > 0;
+
+		const int summaryHeight = MPDebugHeaderHeight + (2 * MPDebugSummaryLineHeight) + 8;
+		const int tableHeight = showTable ? (MPDebugTableHeaderHeight + (rowCount * MPDebugTableRowHeight) + 8) : 14;
+		const int panelHeight = summaryHeight + tableHeight + 8;
+
+		RectangleStruct panelRect
+		{
+			viewBounds.X + MPDebugPanelMargin,
+			viewBounds.Y + MPDebugPanelMargin,
+			panelWidth,
+			panelHeight
+		};
+
+		const ColorStruct panelColor { 12, 20, 30 };
+		const ColorStruct borderColor { 58, 84, 112 };
+		pSurface->FillRect(&panelRect, Drawing::RGB_To_Int(panelColor));
+		pSurface->DrawRect(&panelRect, Drawing::RGB_To_Int(borderColor));
+
+		const int textLeft = panelRect.X + 8;
+		int textY = panelRect.Y + 5;
+
+		const ColorStruct titleColor { 210, 230, 255 };
+		DrawMPDebugText(
+			L"MP Debug Stats",
+			panelRect,
+			textLeft,
+			textY,
+			titleColor,
+			TextPrintType::NoShadow | TextPrintType::Point8
+		);
+		textY += MPDebugHeaderHeight;
+
+		const wchar_t* pMode = SessionClass::IsCampaign()
+			? L"Campaign"
+			: SessionClass::IsSkirmish()
+			? L"Skirmish"
+			: SessionClass::IsMultiplayer()
+			? L"Multiplayer"
+			: L"Unknown";
+
+		const int responseTime = (IPXManagerClass::Instance.ResponseTime() * 1000) / 60;
+		wchar_t summaryLine[256];
+		swprintf_s(
+			summaryLine,
+			L"Frame %d  FPS %u  Req %d  MaxAhead %d  Resp %dms",
+			Unsorted::CurrentFrame,
+			FPSCounter::CurrentFrameRate,
+			Game::Network.RequestedFPS,
+			Game::Network.MaxAhead,
+			responseTime
+		);
+		DrawMPDebugText(summaryLine, panelRect, textLeft, textY, ColorStruct { 222, 232, 242 });
+		textY += MPDebugSummaryLineHeight;
+
+		swprintf_s(
+			summaryLine,
+			L"%ls  Players %d  Proc %d/%d  LatFudge %d",
+			pMode,
+			std::max(SessionClass::Instance.MPlayerCount, rowCount),
+			SessionClass::Instance.ProcessTicks,
+			SessionClass::Instance.ProcessFrames,
+			Game::Network.LatencyFudge
+		);
+		DrawMPDebugText(summaryLine, panelRect, textLeft, textY, ColorStruct { 186, 204, 224 });
+		textY += MPDebugSummaryLineHeight + 4;
+
+		if (!showTable)
+		{
+			DrawMPDebugText(
+				L"Waiting for remote player stats...",
+				panelRect,
+				textLeft,
+				textY,
+				ColorStruct { 156, 176, 198 }
+			);
+			return;
+		}
+
+		const int contentWidth = panelRect.Width - 16;
+		const int colPlayer = textLeft;
+		const int colProc = textLeft + (contentWidth * 37) / 100;
+		const int colRtt = textLeft + (contentWidth * 48) / 100;
+		const int colLoss = textLeft + (contentWidth * 66) / 100;
+		const int colStalls = textLeft + (contentWidth * 84) / 100;
+
+		DrawMPDebugText(L"Player", panelRect, colPlayer, textY, ColorStruct { 170, 200, 236 });
+		DrawMPDebugText(L"Proc", panelRect, colProc, textY, ColorStruct { 170, 200, 236 });
+		DrawMPDebugText(L"RTT avg/max", panelRect, colRtt, textY, ColorStruct { 170, 200, 236 });
+		DrawMPDebugText(L"Loss/Resend", panelRect, colLoss, textY, ColorStruct { 170, 200, 236 });
+		DrawMPDebugText(L"Stalls", panelRect, colStalls, textY, ColorStruct { 170, 200, 236 });
+		textY += MPDebugTableHeaderHeight;
+
+		int laggingIndex = -1;
+		int lowestProcess = INT_MAX;
+		for (int i = 0; i < rowCount; ++i)
+		{
+			if (rows[i].Process >= 0 && rows[i].Process < lowestProcess)
+			{
+				lowestProcess = rows[i].Process;
+				laggingIndex = i;
+			}
+		}
+
+		// Fallback when process info is not available.
+		if (laggingIndex < 0)
+		{
+			laggingIndex = 0;
+		}
+
+		for (int i = 1; i < rowCount; ++i)
+		{
+			if (rows[i].AverageRoundTrip > rows[laggingIndex].AverageRoundTrip
+				|| (rows[i].AverageRoundTrip == rows[laggingIndex].AverageRoundTrip
+					&& rows[i].MaxRoundTrip > rows[laggingIndex].MaxRoundTrip))
+			{
+				if (lowestProcess == INT_MAX)
+					laggingIndex = i;
+			}
+		}
+
+		for (int i = 0; i < rowCount; ++i)
+		{
+			const ColorStruct lineColor = (i == laggingIndex)
+				? ColorStruct { 255, 188, 160 }
+				: ColorStruct { 224, 234, 246 };
+			const int rowY = textY + i * MPDebugTableRowHeight;
+
+			wchar_t nameText[64];
+			wchar_t processText[24];
+			wchar_t rttText[64];
+			wchar_t lossText[64];
+			wchar_t stallsText[64];
+
+			swprintf_s(nameText, L"%.18ls", rows[i].Name);
+			if (rows[i].Process >= 0)
+				swprintf_s(processText, L"%d", rows[i].Process);
+			else
+				swprintf_s(processText, L"-");
+			swprintf_s(rttText, L"%d/%dms", rows[i].AverageRoundTrip, rows[i].MaxRoundTrip);
+			swprintf_s(lossText, L"%d%%/%d", rows[i].LossPercent, rows[i].Resends);
+			swprintf_s(stallsText, L"%d/%d", rows[i].FrameSyncStalls, rows[i].CommandStalls);
+
+			DrawMPDebugText(nameText, panelRect, colPlayer, rowY, lineColor);
+			DrawMPDebugText(processText, panelRect, colProc, rowY, lineColor);
+			DrawMPDebugText(rttText, panelRect, colRtt, rowY, lineColor);
+			DrawMPDebugText(lossText, panelRect, colLoss, rowY, lineColor);
+			DrawMPDebugText(stallsText, panelRect, colStalls, rowY, lineColor);
+		}
+	}
+}
 
 DEFINE_HOOK(0x777C41, UI_ApplyAppIcon, 0x9)
 {
@@ -497,8 +901,16 @@ DEFINE_HOOK(0x552F79, LoadProgressManager_Draw_MissingLoadingScreenDefaults, 0x6
 	return 0;
 }
 
-// Hides the number at top-left of screen when debug stats are not being drawn
-DEFINE_HOOK(0x55F1F8, MPDebugPrint_CheckDrawFlag, 0x8)
+// Replaces vanilla MP debug stats rendering with a compact custom panel.
+// Hooking at 0x55F1F2 catches both early branches so custom UI appears
+// immediately when the debug flag is active.
+DEFINE_HOOK(0x55F1F2, MPDebugPrint_CheckDrawFlag, 0x6)
 {
-    return Game::DrawMPDebugStats ? 0 : 0x55F280;
+	if (!Game::DrawMPDebugStats)
+		return 0x55F67C;
+
+	// 0x55F1F2 is inside the vanilla MP debug print routine after prologue. We replace its
+	// rendering entirely and jump to the function epilogue.
+	DrawCompactMPDebugStats();
+	return 0x55F67C;
 }
