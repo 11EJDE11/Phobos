@@ -675,6 +675,15 @@ DEFINE_HOOK(0x508F82, HouseClass_AI_CheckSpySat_IncludeUpgrades, 0x6)
 	return Continue;
 }
 
+// Fix desync caused by RNG call based on client-local shroud/fog state.
+// Original in MainLoop:
+//   if (probeCell->ShroudCounter != 1 || (probeCell->AltFlags & 0x18) != 0) Random(0,2);
+// This can evaluate differently across clients due to Clear_Shroud ignoring the probe cell and Reset_Shroud not.
+DEFINE_HOOK(0x55DDE7, MainLoop_SyncRNG_ShroudProbeDesyncFix, 0x11)
+{
+	return 0x55DDF8;
+}
+
 // BuildingClass_What_Action() - Fix no attack cursor if AG=no projectile on primary
 DEFINE_JUMP(LJMP, 0x447380, 0x44739E);
 DEFINE_JUMP(LJMP, 0x447709, 0x447727);
