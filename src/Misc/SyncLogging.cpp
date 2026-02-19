@@ -1,5 +1,13 @@
 #include "SyncLogging.h"
 
+#include <array>
+
+#include <EventClass.h>
+#include <HouseClass.h>
+#include <MessageListClass.h>
+#include <Phobos.h>
+#include <SessionClass.h>
+
 #include <Helpers/Macro.h>
 #include <Utilities/Debug.h>
 #include <Utilities/GeneralUtils.h>
@@ -342,6 +350,68 @@ void SyncLogger::SetTeamLoggingPadding(TeamClass* pTeam)
 	}
 }
 
+namespace
+{
+	std::array<bool, 8> DesyncedHouseWasKicked {};
+	int LastSeenFrame = -1;
+
+	void ResetDesyncKickStateIfNeeded()
+	{
+		// Reset when a new match starts in the same process.
+		if (Unsorted::CurrentFrame < LastSeenFrame)
+			DesyncedHouseWasKicked.fill(false);
+
+		LastSeenFrame = Unsorted::CurrentFrame;
+	}
+
+	bool TryKickDesyncedPlayer(REGISTERS* R)
+	{
+		if (!Phobos::Config::KickDesyncedPlayer || !SessionClass::IsMultiplayer() || !HouseClass::CurrentPlayer)
+			return false;
+
+		ResetDesyncKickStateIfNeeded();
+
+		// Staying with normal OOS handling in 1v1 matches avoids edge-case behavior.
+		if (SessionClass::Instance.MPlayerCount < 3 || NodeNameType::Array.Count < 3)
+			return false;
+
+		// Only master should issue RemovePlayer to avoid duplicate events from all peers.
+		if (!reinterpret_cast<char(__fastcall*)(int)>(0x697E70)(0))
+			return false;
+
+		GET(const int, eventIndex, EBP);
+		constexpr int maxDoListEvents = EventClass::MAX_EVENTS * 128;
+		if (eventIndex < 0 || eventIndex >= maxDoListEvents)
+			return false;
+
+		auto* const pEvent = EventClass::DoList.GetArray() + eventIndex;
+		if (pEvent->Type != EventType::FrameInfo)
+			return false;
+
+		const int localHouse = HouseClass::CurrentPlayer->ArrayIndex;
+		const int desyncedHouse = static_cast<unsigned char>(pEvent->HouseIndex);
+		if (desyncedHouse >= static_cast<int>(DesyncedHouseWasKicked.size()) || desyncedHouse == localHouse)
+			return false;
+
+		if (DesyncedHouseWasKicked[desyncedHouse])
+			return true;
+
+		EventClass removePlayerEvent(localHouse, EventType::RemovePlayer);
+		removePlayerEvent.RemovePlayer.HouseID = desyncedHouse;
+		if (!EventClass::OutList.Add(removePlayerEvent))
+			return false;
+
+		DesyncedHouseWasKicked[desyncedHouse] = true;
+
+		wchar_t message[96];
+		_snwprintf_s(message, _TRUNCATE, L"[Phobos] OOS detected. Removed player %d.", desyncedHouse);
+		MessageListClass::Instance.PrintMessage(message);
+
+		Debug::Log("Queued RemovePlayer for desynced house %d at frame %d.\n", desyncedHouse, Unsorted::CurrentFrame);
+		return true;
+	}
+}
+
 // Hooks. Anim contructor logging is in Ext/Anim/Body.cpp to reduce duplicate hooks
 
 // Sync file writing
@@ -367,6 +437,8 @@ DEFINE_HOOK(0x64736D, Queue_AI_WriteDesyncLog, 0x5)
 
 DEFINE_HOOK(0x64CD11, ExecuteDoList_WriteDesyncLog, 0x8)
 {
+	enum { ContinueAfterCRCFailure = 0x64CAA8 };
+
 	char logFilename[0x40];
 
 	if (Game::EnableMPSyncDebug)
@@ -382,6 +454,9 @@ DEFINE_HOOK(0x64CD11, ExecuteDoList_WriteDesyncLog, 0x8)
 		_snprintf_s(logFilename, _TRUNCATE, "SYNC%01d.TXT", HouseClass::CurrentPlayer->ArrayIndex);
 		SyncLogger::WriteSyncLog(logFilename);
 	}
+
+	if (TryKickDesyncedPlayer(R))
+		return ContinueAfterCRCFailure;
 
 	return 0;
 }

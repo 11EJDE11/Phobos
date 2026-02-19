@@ -105,6 +105,7 @@ public:
 		static bool ShowPowerDelta;
 		static bool ShowHarvesterCounter;
 		static bool ShowWeedsCounter;
+		static bool KickDesyncedPlayer;
 		static bool ShowPlanningPath;
 		static bool HideLightFlashEffects;
 		static bool HideLaserTrailEffects;
