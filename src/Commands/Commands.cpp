@@ -14,9 +14,90 @@
 #include "ToggleMessageList.h"
 
 #include <CCINIClass.h>
+#include <InputManagerClass.h>
+#include <RulesClass.h>
+#include <Surface.h>
+#include <TacticalClass.h>
+#include <WWMouseClass.h>
 
 #include <Ext/Sidebar/SWSidebar/SWSidebarClass.h>
 #include <Misc/MessageColumn.h>
+
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+	constexpr double DefaultZoomFactor = 1.0;
+	constexpr int MouseWheelZoomSteps = 5;
+	bool ConsumeSidebarWheelScroll = false;
+
+	bool IsCursorInTacticalView()
+	{
+		if (!WWMouseClass::Instance)
+			return false;
+
+		const auto& mousePosition = WWMouseClass::Instance->XY1;
+		const auto& viewBounds = DSurface::ViewBounds;
+
+		return mousePosition.X >= viewBounds.X
+			&& mousePosition.X < (viewBounds.X + viewBounds.Width)
+			&& mousePosition.Y >= viewBounds.Y
+			&& mousePosition.Y < (viewBounds.Y + viewBounds.Height);
+	}
+
+	bool SetMapZoomFactor(double factor)
+	{
+		if (!TacticalClass::Instance || factor <= 0.0)
+			return false;
+
+		if (std::abs(TacticalClass::Instance->ZoomInFactor - factor) < 0.0001)
+			return true;
+
+		TacticalClass::Instance->ZoomInFactor = factor;
+
+		if (InputManagerClass::Instance)
+			InputManagerClass::Instance->DoSomething();
+
+		return true;
+	}
+
+	double GetSteppedZoomFactor(double currentZoomFactor, double targetZoomFactor, bool zoomIn)
+	{
+		const auto delta = targetZoomFactor - DefaultZoomFactor;
+		if (std::abs(delta) < 0.0001 || MouseWheelZoomSteps <= 0)
+			return zoomIn ? targetZoomFactor : DefaultZoomFactor;
+
+		if (!std::isfinite(currentZoomFactor) || currentZoomFactor <= 0.0)
+			currentZoomFactor = DefaultZoomFactor;
+
+		const auto minZoom = std::min(DefaultZoomFactor, targetZoomFactor);
+		const auto maxZoom = std::max(DefaultZoomFactor, targetZoomFactor);
+		currentZoomFactor = std::clamp(currentZoomFactor, minZoom, maxZoom);
+
+		const auto progress = (currentZoomFactor - DefaultZoomFactor) / delta;
+		auto stepIndex = static_cast<int>(std::lround(std::clamp(progress, 0.0, 1.0) * MouseWheelZoomSteps));
+
+		stepIndex += zoomIn ? 1 : -1;
+		stepIndex = std::clamp(stepIndex, 0, MouseWheelZoomSteps);
+
+		const auto steppedProgress = static_cast<double>(stepIndex) / MouseWheelZoomSteps;
+		return DefaultZoomFactor + delta * steppedProgress;
+	}
+
+	bool TryMouseWheelMapZoom(bool zoomIn)
+	{
+		if (!RulesClass::Instance || !TacticalClass::Instance || !IsCursorInTacticalView())
+			return false;
+
+		const auto zoomInFactor = RulesClass::Instance->ZoomInFactor;
+		if (zoomInFactor <= 0.0)
+			return false;
+
+		const auto nextZoom = GetSteppedZoomFactor(TacticalClass::Instance->ZoomInFactor, zoomInFactor, zoomIn);
+		return SetMapZoomFactor(nextZoom);
+	}
+}
 
 DEFINE_HOOK(0x533066, CommandClassCallback_Register, 0x6)
 {
@@ -63,18 +144,31 @@ DEFINE_HOOK(0x533066, CommandClassCallback_Register, 0x6)
 static void MouseWheelDownCommand()
 {
 	if (MessageColumnClass::Instance.IsHovering())
+	{
 		MessageColumnClass::Instance.ScrollDown();
+		ConsumeSidebarWheelScroll = true;
+		return;
+	}
+
+	ConsumeSidebarWheelScroll = TryMouseWheelMapZoom(false);
 }
 
 static void MouseWheelUpCommand()
 {
 	if (MessageColumnClass::Instance.IsHovering())
+	{
 		MessageColumnClass::Instance.ScrollUp();
+		ConsumeSidebarWheelScroll = true;
+		return;
+	}
+
+	ConsumeSidebarWheelScroll = TryMouseWheelMapZoom(true);
 }
 
 DEFINE_HOOK(0x777998, Game_WndProc_ScrollMouseWheel, 0x6)
 {
 	GET(const WPARAM, WParam, ECX);
+	ConsumeSidebarWheelScroll = false;
 
 	if (WParam & 0x80000000u)
 		MouseWheelDownCommand();
@@ -86,6 +180,12 @@ DEFINE_HOOK(0x777998, Game_WndProc_ScrollMouseWheel, 0x6)
 
 static inline bool CheckSkipScrollSidebar()
 {
+	if (ConsumeSidebarWheelScroll)
+	{
+		ConsumeSidebarWheelScroll = false;
+		return true;
+	}
+
 	return MessageColumnClass::Instance.IsHovering();
 }
 
