@@ -216,6 +216,7 @@ public:
 		Valueable<bool> AISetBaseCenter;
 		Valueable<bool> AIBiasSpawnCell;
 		Valueable<bool> AIForbidConYard;
+		Valueable<bool> NoStartingBaseUnits;
 		Valueable<bool> AINodeWallsOnly;
 		Valueable<bool> AICleanWallNode;
 
@@ -483,7 +484,8 @@ public:
 			, AIAutoDeployMCV { true }
 			, AISetBaseCenter { true }
 			, AIBiasSpawnCell { false }
-			, AIForbidConYard { false }
+			, AIForbidConYard { true }
+			, NoStartingBaseUnits { true }
 			, AINodeWallsOnly { false }
 			, AICleanWallNode { false }
 			, AttackMove_Aggressive { false }

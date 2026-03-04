@@ -1126,6 +1126,12 @@ void TechnoTypeExt::ExtData::LoadFromINIFile(CCINIClass* const pINI)
 	this->AttackMove_Follow_IfMindControlIsFull.Read(exINI, pSection, "AttackMove.Follow.IfMindControlIsFull");
 	this->AttackMove_StopWhenTargetAcquired.Read(exINI, pSection, "AttackMove.StopWhenTargetAcquired");
 	this->AttackMove_PursuitTarget.Read(exINI, pSection, "AttackMove.PursuitTarget");
+	this->AI_TargetNearestEnemyUnit.Read(exINI, pSection, "AI.TargetNearestEnemyUnit");
+	if (!pINI->Exists(pSection, "AI.TargetNearestEnemyUnit")
+		&& (!_strcmpi(pSection, "HTNK") || !_strcmpi(pSection, "MTNK")))
+	{
+		this->AI_TargetNearestEnemyUnit = true;
+	}
 
 	this->Ammo_AutoConvertMinimumAmount.Read(exINI, pSection, "Ammo.AutoConvertMinimumAmount");
 	this->Ammo_AutoConvertMaximumAmount.Read(exINI, pSection, "Ammo.AutoConvertMaximumAmount");
@@ -1816,6 +1822,7 @@ void TechnoTypeExt::ExtData::Serialize(T& Stm)
 		.Process(this->AttackMove_Follow_IfMindControlIsFull)
 		.Process(this->AttackMove_StopWhenTargetAcquired)
 		.Process(this->AttackMove_PursuitTarget)
+		.Process(this->AI_TargetNearestEnemyUnit)
 
 		.Process(this->MultiWeapon)
 		.Process(this->MultiWeapon_IsSecondary)

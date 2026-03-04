@@ -185,6 +185,7 @@ public:
 		void UpdateLaserTrails();
 		void UpdateAttachEffects();
 		void UpdateGattlingRateDownReset();
+		void UpdateAITargetNearestEnemyUnit();
 		void UpdateKeepTargetOnMove();
 		void UpdateWarpInDelay();
 		void UpdateCumulativeAttachEffects(AttachEffectTypeClass* pAttachEffectType, AttachEffectClass* pRemoved = nullptr);

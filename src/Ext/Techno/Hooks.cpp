@@ -71,6 +71,7 @@ DEFINE_HOOK(0x736480, UnitClass_AI, 0x6)
 	GET(UnitClass*, pThis, ESI);
 
 	auto const pExt = TechnoExt::ExtMap.Find(pThis);
+	pExt->UpdateAITargetNearestEnemyUnit();
 	pExt->UpdateKeepTargetOnMove();
 	pExt->DepletedAmmoActions();
 	pExt->UpdateSubterraneanHarvester();

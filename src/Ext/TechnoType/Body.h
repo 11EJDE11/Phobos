@@ -439,6 +439,7 @@ public:
 		Valueable<bool> AttackMove_Follow_IfMindControlIsFull;
 		Nullable<bool> AttackMove_StopWhenTargetAcquired;
 		Valueable<bool> AttackMove_PursuitTarget;
+		Valueable<bool> AI_TargetNearestEnemyUnit;
 
 		Valueable<bool> MultiWeapon;
 		ValueableVector<bool> MultiWeapon_IsSecondary;
@@ -868,6 +869,7 @@ public:
 			, AttackMove_Follow_IfMindControlIsFull { false }
 			, AttackMove_StopWhenTargetAcquired { }
 			, AttackMove_PursuitTarget { false }
+			, AI_TargetNearestEnemyUnit { false }
 
 			, MultiWeapon { false }
 			, MultiWeapon_IsSecondary {}

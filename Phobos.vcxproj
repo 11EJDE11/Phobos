@@ -95,6 +95,7 @@
     <ClCompile Include="src\Ext\Unit\Hooks.Harvester.cpp" />
     <ClCompile Include="src\Locomotion\TestLocomotionClass.cpp" />
     <ClCompile Include="src\Misc\Hooks.Gamespeed.cpp" />
+    <ClCompile Include="src\Misc\Hooks.GameMode.cpp" />
     <ClCompile Include="src\Misc\Hooks.Ares.cpp" />
     <ClCompile Include="src\Misc\Hooks.Crates.cpp" />
     <ClCompile Include="src\Misc\Hooks.LightEffects.cpp" />

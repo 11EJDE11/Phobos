@@ -273,6 +273,7 @@ void RulesExt::ExtData::LoadBeforeTypeData(RulesClass* pThis, CCINIClass* pINI)
 	this->AISetBaseCenter.Read(exINI, GameStrings::AI, "AISetBaseCenter");
 	this->AIBiasSpawnCell.Read(exINI, GameStrings::AI, "AIBiasSpawnCell");
 	this->AIForbidConYard.Read(exINI, GameStrings::AI, "AIForbidConYard");
+	this->NoStartingBaseUnits.Read(exINI, GameStrings::General, "NoStartingBaseUnits");
 	this->AINodeWallsOnly.Read(exINI, GameStrings::AI, "AINodeWallsOnly");
 	this->AICleanWallNode.Read(exINI, GameStrings::AI, "AICleanWallNode");
 
@@ -597,6 +598,7 @@ void RulesExt::ExtData::Serialize(T& Stm)
 		.Process(this->AISetBaseCenter)
 		.Process(this->AIBiasSpawnCell)
 		.Process(this->AIForbidConYard)
+		.Process(this->NoStartingBaseUnits)
 		.Process(this->AINodeWallsOnly)
 		.Process(this->AICleanWallNode)
 		.Process(this->AttackMove_Aggressive)

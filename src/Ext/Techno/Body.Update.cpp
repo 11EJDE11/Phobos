@@ -164,6 +164,80 @@ void TechnoExt::ExtData::DepletedAmmoActions()
 	}
 }
 
+void TechnoExt::ExtData::UpdateAITargetNearestEnemyUnit()
+{
+	auto const pTypeExt = this->TypeExtData;
+
+	if (!pTypeExt->AI_TargetNearestEnemyUnit)
+		return;
+
+	auto const pThis = static_cast<UnitClass*>(this->OwnerObject());
+	auto const pThisType = pThis->Type;
+
+	if (pThisType->Harvester || pThisType->DeploysInto || pThisType->IsSimpleDeployer)
+		return;
+
+	if (pThis->Owner->IsControlledByHuman())
+		return;
+
+	if (!pThis->IsAlive || !pThis->IsOnMap || pThis->InLimbo)
+		return;
+
+	if (pThis->CurrentMission == Mission::Unload || pThis->CurrentMission == Mission::Harvest)
+		return;
+
+	UnitClass* pClosestTarget = nullptr;
+	int closestDistance = 0x7FFFFFFF;
+
+	for (auto const pCandidate : UnitClass::Array)
+	{
+		if (!pCandidate || pCandidate == pThis)
+			continue;
+
+		if (!pCandidate->IsAlive || !pCandidate->IsOnMap || pCandidate->InLimbo || pCandidate->Health <= 0)
+			continue;
+
+		auto const pCandidateType = pCandidate->Type;
+
+		if (pCandidateType->Harvester || pCandidateType->DeploysInto || pCandidateType->IsSimpleDeployer)
+			continue;
+
+		if (pThis->Owner->IsAlliedWith(pCandidate))
+			continue;
+
+		const int weaponIndex = pThis->SelectWeapon(pCandidate);
+
+		if (weaponIndex < 0)
+			continue;
+
+		const auto fireError = pThis->GetFireError(pCandidate, weaponIndex, true);
+
+		if (fireError == FireError::ILLEGAL || fireError == FireError::CANT || fireError == FireError::MUST_DEPLOY)
+			continue;
+
+		const int distance = pThis->DistanceFrom(pCandidate);
+
+		if (distance < closestDistance)
+		{
+			closestDistance = distance;
+			pClosestTarget = pCandidate;
+		}
+	}
+
+	if (!pClosestTarget)
+		return;
+
+	const auto mission = pThis->GetCurrentMission();
+
+	if (pThis->Target == pClosestTarget && (mission == Mission::Attack || mission == Mission::Move))
+		return;
+
+	pThis->SetTarget(pClosestTarget);
+	pThis->SetDestination(pClosestTarget, true);
+	pThis->SetArchiveTarget(pClosestTarget);
+	pThis->QueueMission(Mission::Attack, true);
+}
+
 void TechnoExt::ExtData::AmmoAutoConvertActions()
 {
 	const auto pTypeExt = this->TypeExtData;
